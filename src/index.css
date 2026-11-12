@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+html, body, #root { min-height: 100%; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+body { margin: 0; font-family: Inter, system-ui, 'Segoe UI', 'Noto Sans', 'Noto Sans CJK SC', 'Noto Sans Arabic', 'Noto Sans Devanagari', sans-serif; background: #181512; overflow-x: hidden; text-rendering: optimizeLegibility; overflow-wrap: anywhere; }
+button { touch-action: manipulation; }
+::selection { background: rgba(180, 83, 42, .28); }
+
+@layer components {
+  /* The physical sheet: stacked page edges, binding shade, grain */
+  .sheet {
+    position: relative;
+    background-color: #F7F3EB;
+    color: #26221E;
+    border-radius: 5px 12px 9px 11px / 9px 6px 12px 7px;
+    box-shadow:
+      3px 3px 0 0 #ebe4d3,
+      6px 6px 0 0 #e2dac7,
+      0 26px 44px -12px rgba(0,0,0,.75),
+      0 2px 3px rgba(0,0,0,.4);
+  }
+  .sheet::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: inherit; opacity: .55; mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .45  0 0 0 0 .34  0 0 0 0 .22  0 0 0 .22 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+  .sheet::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+    background: linear-gradient(90deg, rgba(60,40,20,.10), transparent 22px), radial-gradient(ellipse at center, transparent 62%, rgba(120,90,50,.13) 100%);
+  }
+  .margin-line::before {
+    content: ''; position: absolute; top: 0; bottom: 0; left: 30px; width: 1px; background: rgba(180, 83, 42, .38); pointer-events: none;
+  }
+  @media (min-width: 640px) { .margin-line::before { left: 46px; } }
+  .lined { line-height: 30px; background-attachment: local; background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 29px, rgba(70,90,120,.17) 29px, rgba(70,90,120,.17) 30px); }
+  .dotted { line-height: 30px; background-attachment: local; background-image: radial-gradient(circle, rgba(70,60,50,.32) 1.1px, transparent 1.5px); background-size: 30px 30px; background-position: 0 14px; }
+  .plain { line-height: 30px; }
+
+  .ink-area { caret-color: #B4532A; font-family: Newsreader, Georgia, 'Noto Serif', 'Noto Serif CJK SC', 'Noto Naskh Arabic', serif; font-size: 20px; color: #26221E; }
+  .ink-area::placeholder { color: rgba(38,34,30,.32); font-style: italic; }
+
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-medium transition duration-300 active:scale-[.97] disabled:opacity-40 disabled:pointer-events-none; }
+  .btn-ember { @apply bg-terra text-paper hover:bg-ember shadow-lg shadow-black/30; }
+  .btn-ghost-dark { @apply bg-white/5 text-paper/90 hover:bg-white/10 border border-white/10; }
+  .btn-ghost-light { @apply bg-white/60 text-ink hover:bg-white border border-botanical/20; }
+  .chip { @apply rounded-full px-3 py-1 text-xs font-medium border transition duration-200; }
+
+  .glass-bar { @apply rounded-2xl border border-white/10 bg-desk/85 backdrop-blur-md shadow-2xl shadow-black/50; }
+
+  .envelope-clip { clip-path: polygon(0 3%, 6% 0, 14% 2%, 24% 0, 38% 2%, 52% 0, 66% 3%, 80% 0, 92% 2%, 100% 1%, 99% 14%, 100% 30%, 98% 48%, 100% 66%, 99% 84%, 100% 98%, 90% 100%, 76% 98%, 60% 100%, 44% 98%, 30% 100%, 16% 98%, 5% 100%, 0 97%, 1% 80%, 0 62%, 2% 44%, 0 26%, 1% 12%); }
+}
+
+textarea, input { outline: none; }
+.scroll-soft::-webkit-scrollbar { width: 8px; }
+.scroll-soft::-webkit-scrollbar-thumb { background: rgba(120,100,70,.28); border-radius: 8px; }
