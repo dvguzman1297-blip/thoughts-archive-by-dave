@@ -213,6 +213,17 @@ export default function CloudPanel({ cloud, onClose, page = false, onSkip }) {
             <button className="btn btn-ghost-light w-full" onClick={() => cloud.syncNow()} disabled={cloud.status === 'syncing'}>
               <RefreshCw size={15} className={cloud.status === 'syncing' ? 'animate-spin' : ''} /> Sync now
             </button>
+            <details className="rounded-xl border border-ink/10 p-3">
+              <summary className="cursor-pointer font-medium text-ink/80">Enable sign-in with passphrase</summary>
+              <div className="mt-3 space-y-2">
+                <p className="text-xs text-ink/60">For accounts made with an email link or Google. Enter your journal passphrase once and the Sign in tab will accept it for this email.</p>
+                <PassField value={pass} onChange={setPass} placeholder="Journal passphrase" auto="current-password" show={show} setShow={setShow} cls={field} />
+                <button className="btn btn-ghost-light w-full !rounded-lg" disabled={busy || !pass} onClick={() => run(async () => { await cloud.enablePassphraseLogin(pass); setPass(''); setNote('Done. You can now sign in with this email and passphrase.'); })}>
+                  <KeyRound size={15} /> Enable
+                </button>
+                {note && <p className="text-xs text-botanical">{note}</p>}
+              </div>
+            </details>
             <div className="flex gap-2">
               <button className="btn btn-ghost-light flex-1" onClick={cloud.forgetKey}>Forget passphrase here</button>
               <button className="btn btn-ghost-light flex-1" onClick={cloud.signOut}><LogOut size={15} /> Sign out</button>

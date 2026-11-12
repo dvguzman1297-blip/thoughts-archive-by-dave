@@ -287,6 +287,14 @@ export function useCloud({ snapshot, apply }) {
   };
   const unlock = (pass) => unlockFor(user.id, pass);
 
+  // For accounts created by email link / Google: attach the passphrase login to the signed-in account.
+  const enablePassphraseLogin = async (pass) => {
+    await unlockFor(user.id, pass); // verifies it matches the journal (or creates the journal key)
+    const email = (user.email || '').trim().toLowerCase();
+    const { error: err } = await supabase.auth.updateUser({ password: await authPassword(email, pass) });
+    if (err) throw err;
+  };
+
   // Passphrase accounts: the one passphrase gives a derived account password (what the server sees)
   // and, separately, the journal encryption key (which never leaves this device).
   const rememberEmail = (email) => {
@@ -337,5 +345,5 @@ export function useCloud({ snapshot, apply }) {
     await supabase.auth.signOut();
   };
 
-  return { enabled: cloudEnabled, authReady, user, ready, hasRemote, status, error, lastSynced, sendLink, verifyCode, oauth, unlock, login, register, forgetKey, signOut, syncNow };
+  return { enabled: cloudEnabled, authReady, user, ready, hasRemote, status, error, lastSynced, sendLink, verifyCode, oauth, unlock, enablePassphraseLogin, login, register, forgetKey, signOut, syncNow };
 }
