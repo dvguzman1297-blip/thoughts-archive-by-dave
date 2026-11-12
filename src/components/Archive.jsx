@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BookHeart, Flame, Lock, Unlock, Eye, EyeOff, X, Sprout, Trash2, CalendarHeart } from 'lucide-react';
 import { MOODS } from '../data/content';
+import { plainToHtml, sanitize } from '../lib/rich';
 import { DAY, countdown, dayKey, daysBetween, fmtDate, streakOf, unseal, useTick } from '../lib/util';
 
 function Tabs({ tab, setTab, counts, light }) {
@@ -174,7 +175,7 @@ function Reveal({ ash, heal, nowMs, onClose, onDelete }) {
             <p className="text-[11px] uppercase tracking-[.14em] text-terra font-semibold font-sans relative z-10">{ash.category} · {fmtDate(ash.burnedAt)}</p>
             {ash.prompt && <p className="mt-2 font-serif italic text-ink/70 leading-snug relative z-10">{ash.prompt}</p>}
             <div className="mt-3 h-px bg-ink/20 relative z-10" />
-            <p className="mt-4 font-serif text-xl leading-[30px] whitespace-pre-wrap relative z-10">{unseal(ash.sealed)}</p>
+            <div className="rich mt-4 relative z-10" dangerouslySetInnerHTML={{ __html: sanitize(ash.sealedHtml ? unseal(ash.sealedHtml) : plainToHtml(unseal(ash.sealed))) }} />
           </div>
           <div className="rounded-md bg-sage text-ink overflow-hidden shadow-2xl shadow-black/50 animate-fadeUp">
             <div className="h-[3px] bg-terra/70" />

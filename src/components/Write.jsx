@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Shuffle, PenLine, Feather, Grid3x3, Lock, ArrowRight, ChevronDown } from 'lucide-react';
 import { CATEGORIES, LOCKS, PROMPTS, catById, computeUnlock, promptById } from '../data/content';
+import RichEditor from './RichEditor';
 import { dailyIndex, fmtDate, fmtLong, wordCount } from '../lib/util';
 
 export default function Write({ draft, setDraft, settings, setSettings, nowMs, onContinue }) {
@@ -18,9 +19,9 @@ export default function Write({ draft, setDraft, settings, setSettings, nowMs, o
     const pick = pool[Math.floor(Math.random() * pool.length)];
     setDraft({ ...draft, cat: catId, promptId: pick.id });
   };
-  const onType = (e) => {
+  const onType = ({ text, html }) => {
     // Pin the prompt on first keystroke so it stays the same when you come back tomorrow.
-    setDraft({ ...draft, text: e.target.value, promptId: draft.promptId || prompt.id, savedAt: Date.now() });
+    setDraft({ ...draft, text, html, promptId: draft.promptId || prompt.id, savedAt: Date.now() });
     setInking(true);
     clearTimeout(inkTimer.current);
     inkTimer.current = setTimeout(() => setInking(false), 260);
@@ -76,18 +77,14 @@ export default function Write({ draft, setDraft, settings, setSettings, nowMs, o
           <div className="mt-3 h-px bg-ink/20" />
         </div>
 
-        <textarea
-          value={draft.text}
+        <RichEditor
+          html={draft.html}
+          text={draft.text}
           onChange={onType}
-          autoFocus={typeof window !== 'undefined' && window.innerWidth >= 640}
-          dir="auto"
-          lang={navigator.language}
-          autoCapitalize="sentences"
-          autoCorrect="on"
-          enterKeyHint="enter"
-          spellCheck
+          guideClass={guideClass}
           placeholder="Begin here. Nobody will read this. It is meant to be burned."
-          className={`ink-area ${guideClass} relative z-10 flex-1 w-full resize-none bg-transparent pl-[44px] pr-4 sm:pl-[62px] sm:pr-6 pb-8 min-h-0 overflow-y-auto scroll-soft`}
+          autoFocus={typeof window !== 'undefined' && window.innerWidth >= 640}
+          lang={navigator.language}
         />
       </div>
 

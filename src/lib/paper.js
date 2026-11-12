@@ -1,7 +1,12 @@
 // Renders the written page to a canvas so the Tear and Burn phases can
-// operate on exactly what the user wrote.
+// operate on exactly what the user wrote (including their formatting).
+import { htmlToBlocks, plainToHtml } from './rich';
 
+const HAND = "Caveat, 'Noto Serif', 'Noto Serif CJK SC', 'Noto Naskh Arabic', Georgia, serif";
 const SERIF = "Newsreader, Georgia, 'Noto Serif', 'Noto Serif CJK SC', 'Noto Naskh Arabic', serif";
+const SANS = "Inter, system-ui, 'Noto Sans', 'Noto Sans CJK SC', sans-serif";
+const BASE = 25; // px of "normal" handwriting
+const INK = '#1f2a44';
 
 export function pageLayout(vw, vh) {
   const W = Math.round(Math.min(1100, vw - (vw < 640 ? 16 : 24)));
@@ -17,8 +22,6 @@ function wrapLines(ctx, text, maxW) {
       continue;
     }
     let line = '';
-    // Split on spaces, and break over-long words (or space-less scripts such as
-    // Chinese/Japanese) per code point so nothing runs off the page.
     for (const word of para.split(/\s+/)) {
       const test = line ? `${line} ${word}` : word;
       if (ctx.measureText(test).width <= maxW) {
@@ -45,9 +48,87 @@ function wrapLines(ctx, text, maxW) {
   return lines;
 }
 
-export async function makePageCanvas({ W, H, text, prompt, category, dateLabel, guide, dpr = 2 }) {
+const fontFor = (r, px) => {
+  const fam = r.fam || 'hand';
+  const w = r.b ? 700 : fam === 'hand' ? 500 : 400;
+  return `${r.i ? 'italic ' : ''}${w} ${px}px ${fam === 'hand' ? HAND : fam === 'serif' ? SERIF : SANS}`;
+};
+
+/** Word-wrap styled blocks into lines of positioned segments. */
+function layoutBlocks(ctx, blocks, textW, k) {
+  const row = 30 * k;
+  const lines = [];
+  const measure = (t, r, px) => {
+    ctx.font = fontFor(r, px);
+    return ctx.measureText(t).width;
+  };
+  for (const b of blocks) {
+    const indent = b.marker ? 28 * k : 0;
+    const maxW = textW - indent;
+    let first = true;
+    const fresh = () => {
+      const l = { segs: [], w: 0, trail: 0, px: BASE * k, align: b.align, indent, marker: first ? b.marker : null, markerRun: b.runs[0] || { fam: 'hand', mult: 1 } };
+      first = false;
+      return l;
+    };
+    let line = fresh();
+    const push = () => {
+      lines.push(line);
+      line = fresh();
+    };
+    const add = (t, r, px, w, isSpace) => {
+      const last = line.segs[line.segs.length - 1];
+      if (last && last.r === r && last.px === px) {
+        last.t += t;
+        last.w += w;
+      } else line.segs.push({ t, r, px, w });
+      line.w += w;
+      line.trail = isSpace ? line.trail + w : 0;
+      if (!isSpace) line.px = Math.max(line.px, px);
+    };
+    for (const r of b.runs) {
+      const px = BASE * r.mult * k;
+      for (const part of r.text.split(/(\n|[ \t]+)/)) {
+        if (!part) continue;
+        if (part === '\n') {
+          push();
+          continue;
+        }
+        if (/^[ \t]+$/.test(part)) {
+          if (line.segs.length) add(' ', r, px, measure(' ', r, px), true);
+          continue;
+        }
+        const w = measure(part, r, px);
+        if (line.w + w > maxW && line.segs.length) push();
+        if (w <= maxW) {
+          add(part, r, px, w, false);
+          continue;
+        }
+        for (const ch of Array.from(part)) {
+          const cw = measure(ch, r, px);
+          if (line.w + cw > maxW && line.segs.length) push();
+          add(ch, r, px, cw, false);
+        }
+      }
+    }
+    lines.push(line);
+  }
+  lines.forEach((l) => {
+    l.rows = Math.max(1, Math.ceil((l.px * 1.2) / row - 0.01));
+  });
+  return { lines, rows: lines.reduce((n, l) => n + l.rows, 0), row };
+}
+
+export async function makePageCanvas({ W, H, text, html, prompt, category, dateLabel, guide, dpr = 2 }) {
   try {
-    await Promise.all([document.fonts.load('400 20px Newsreader'), document.fonts.load('italic 400 19px Newsreader'), document.fonts.load('600 11px Inter')]);
+    await Promise.all([
+      document.fonts.load('500 25px Caveat'),
+      document.fonts.load('700 25px Caveat'),
+      document.fonts.load('400 20px Newsreader'),
+      document.fonts.load('italic 400 19px Newsreader'),
+      document.fonts.load('400 17px Inter'),
+      document.fonts.load('600 11px Inter'),
+    ]);
   } catch {
     /* fonts optional */
   }
@@ -99,25 +180,22 @@ export async function makePageCanvas({ W, H, text, prompt, category, dateLabel, 
   x.lineTo(W - padR, y);
   x.stroke();
 
-  // fit body text
+  // lay out the body, shrinking everything a little if it would overflow the page
   const top = y + 8;
-  let size = 20;
-  let lines;
-  for (;;) {
-    x.font = `400 ${size}px ${SERIF}`;
-    lines = wrapLines(x, text, textW);
-    const cap = Math.floor((H - top - 22) / (size * 1.5));
-    if (lines.length <= cap || size <= 11) break;
-    size -= 1;
+  const blocks = htmlToBlocks(html || plainToHtml(text));
+  let lay;
+  for (let k = 1; k >= 0.5; k -= 0.05) {
+    lay = layoutBlocks(x, blocks, textW, k);
+    if (lay.rows <= Math.floor((H - top - 22) / lay.row)) break;
   }
-  const LH = size * 1.5;
+  const { lines, row } = lay;
+  const rows = Math.floor((H - top - 12) / row);
 
   // guides
-  const rows = Math.floor((H - top - 12) / LH);
   if (guide === 'lines') {
     x.strokeStyle = 'rgba(70,90,120,.17)';
     for (let i = 1; i <= rows; i++) {
-      const ly = top + i * LH;
+      const ly = top + i * row;
       x.beginPath();
       x.moveTo(0, ly);
       x.lineTo(W, ly);
@@ -125,7 +203,7 @@ export async function makePageCanvas({ W, H, text, prompt, category, dateLabel, 
     }
   } else if (guide === 'dots') {
     x.fillStyle = 'rgba(70,60,50,.3)';
-    for (let i = 1; i <= rows; i++) for (let dx = 20; dx < W - 10; dx += 30) x.fillRect(dx, top + i * LH, 1.4, 1.4);
+    for (let i = 1; i <= rows; i++) for (let dx = 20; dx < W - 10; dx += 30) x.fillRect(dx, top + i * row, 1.4, 1.4);
   }
   x.strokeStyle = 'rgba(180,83,42,.4)';
   x.beginPath();
@@ -133,9 +211,43 @@ export async function makePageCanvas({ W, H, text, prompt, category, dateLabel, 
   x.lineTo(marginX, H);
   x.stroke();
 
-  x.fillStyle = '#26221E';
-  x.font = `400 ${size}px ${SERIF}`;
-  lines.slice(0, rows).forEach((l, i) => x.fillText(l, padL, top + (i + 1) * LH - LH * 0.28));
+  // body text
+  let rowIdx = 0;
+  for (const ln of lines) {
+    if (rowIdx + ln.rows > rows) break;
+    const baseY = top + (rowIdx + ln.rows) * row - row * 0.28;
+    const avail = textW - ln.indent;
+    const used = ln.w - ln.trail;
+    const x0 = padL + ln.indent;
+    let px = ln.align === 'c' ? x0 + (avail - used) / 2 : ln.align === 'r' ? x0 + avail - used : x0;
+    if (ln.marker) {
+      const mr = ln.markerRun;
+      x.font = fontFor(mr, BASE * (mr.mult || 1) * (row / 30));
+      x.fillStyle = INK;
+      x.fillText(ln.marker, padL + ln.indent - 20 * (row / 30), baseY);
+    }
+    for (const sg of ln.segs) {
+      x.font = fontFor(sg.r, sg.px);
+      if (sg.r.bg) {
+        x.fillStyle = sg.r.bg;
+        x.fillRect(px, baseY - sg.px * 0.82, sg.w, sg.px * 1.02);
+      }
+      x.fillStyle = sg.r.color || INK;
+      x.fillText(sg.t, px, baseY);
+      if (sg.r.u || sg.r.s) {
+        x.strokeStyle = sg.r.color || INK;
+        x.lineWidth = Math.max(1, sg.px / 18);
+        x.beginPath();
+        const ly = sg.r.u ? baseY + 3 : baseY - sg.px * 0.3;
+        x.moveTo(px, ly);
+        x.lineTo(px + sg.w, ly);
+        x.stroke();
+        x.lineWidth = 1;
+      }
+      px += sg.w;
+    }
+    rowIdx += ln.rows;
+  }
 
   // soft edge vignette + binding shade
   const g = x.createLinearGradient(0, 0, 22, 0);

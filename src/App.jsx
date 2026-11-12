@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Cloud, CloudOff, BookOpen, Volume2, VolumeX, Archive as ArchiveIcon, Pencil, Scissors, Flame, Sprout } from 'lucide-react';
 import { CATEGORIES, PROMPTS, catById, computeUnlock, promptById } from './data/content';
+import { plainToHtml } from './lib/rich';
 import { K, fmtLong, seal, uid, usePersisted, wordCount, dailyIndex } from './lib/util';
 import { chime, setMuted } from './lib/audio';
 import { makePageCanvas, pageLayout } from './lib/paper';
@@ -99,6 +100,7 @@ export default function App() {
       W: layout.W,
       H: layout.H,
       text: draft.text,
+      html: draft.html,
       prompt: draft.free ? '' : p.text,
       category: draft.free ? 'Free Write' : catById(p.cat).name,
       dateLabel: fmtLong(nowMs()),
@@ -120,13 +122,14 @@ export default function App() {
       category: draft.free ? 'Free Write' : catById(p.cat).name,
       prompt: draft.free ? '' : p.text,
       sealed: seal(draft.text),
+      sealedHtml: seal(draft.html || plainToHtml(draft.text)),
       words: wordCount(draft.text),
     };
     setAshes((a) => [ash, ...a]);
     setAshId(ash.id);
     setHealCat(draft.free ? 'any' : p.cat);
     setPending({ ...NO_PENDING, ashId: ash.id, cat: draft.free ? 'any' : p.cat });
-    setDraft({ ...draft, text: '', promptId: null });
+    setDraft({ ...draft, text: '', html: '', promptId: null });
   };
 
   const onBurnDone = () => {
