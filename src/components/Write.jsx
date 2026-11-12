@@ -19,7 +19,8 @@ export default function Write({ draft, setDraft, settings, setSettings, nowMs, o
     setDraft({ ...draft, cat: catId, promptId: pick.id });
   };
   const onType = (e) => {
-    setDraft({ ...draft, text: e.target.value });
+    // Pin the prompt on first keystroke so it stays the same when you come back tomorrow.
+    setDraft({ ...draft, text: e.target.value, promptId: draft.promptId || prompt.id, savedAt: Date.now() });
     setInking(true);
     clearTimeout(inkTimer.current);
     inkTimer.current = setTimeout(() => setInking(false), 260);
@@ -96,6 +97,7 @@ export default function Write({ draft, setDraft, settings, setSettings, nowMs, o
           <div className="flex items-center gap-2 text-paper/70 text-xs">
             <PenLine size={15} className={`text-ember transition-transform duration-200 ${inking ? '-rotate-12 scale-125' : ''}`} />
             <span>{words} {words === 1 ? 'word' : 'words'}</span>
+            {draft.text && <span className="text-paper/40 hidden sm:inline">· draft saved</span>}
           </div>
           <button onClick={() => setDraft({ ...draft, free: !draft.free })} className={`chip inline-flex items-center gap-1.5 ${draft.free ? 'bg-terra border-terra text-paper' : 'border-white/15 text-paper/75 hover:bg-white/10'}`} aria-pressed={draft.free}>
             <Feather size={12} /> Free write

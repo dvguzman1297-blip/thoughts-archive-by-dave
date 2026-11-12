@@ -24,13 +24,17 @@ export default function App() {
   const [heals, setHeals] = usePersisted(K.heals, []);
   const [draft, setDraft] = usePersisted(K.draft, { text: '', promptId: null, free: false, lock: '90d', cat: 'all' });
 
+  const NO_PENDING = { ashId: null, cat: 'any', hpId: null, aff: null, own: '', text: '', mood: null };
+  const [pending, setPending] = usePersisted(K.pending, NO_PENDING);
+
   const [view, setView] = useState('ritual'); // ritual | archive
-  const [phase, setPhase] = useState('write');
+  // If the page was already burned but the heal was never finished, resume at Heal.
+  const [phase, setPhase] = useState(() => (pending.ashId ? 'heal' : 'write'));
   const [tab, setTab] = useState('heal');
   const [snap, setSnap] = useState(null);
   const [pieces, setPieces] = useState(null);
-  const [ashId, setAshId] = useState(null);
-  const [healCat, setHealCat] = useState('any');
+  const [ashId, setAshId] = useState(pending.ashId);
+  const [healCat, setHealCat] = useState(pending.cat || 'any');
   const [toastMsg, setToastMsg] = useState(null);
   const toastTimer = useRef(null);
 
@@ -38,6 +42,9 @@ export default function App() {
   useEffect(() => setMuted(settings.muted), [settings.muted]);
   useEffect(() => {
     document.title = 'Thoughts Archived by Dave';
+    if (pending.ashId) toast('Welcome back. Your page is already ash. Finish your heal whenever you are ready.');
+    else if (draft.text.trim()) toast('Welcome back. Your draft was saved exactly where you left it.');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const toast = (m) => {
@@ -81,6 +88,7 @@ export default function App() {
     setAshes((a) => [ash, ...a]);
     setAshId(ash.id);
     setHealCat(draft.free ? 'any' : p.cat);
+    setPending({ ...NO_PENDING, ashId: ash.id, cat: draft.free ? 'any' : p.cat });
     setDraft({ ...draft, text: '', promptId: null });
   };
 
@@ -92,9 +100,11 @@ export default function App() {
   const saveHeal = ({ prompt, reflection, affirmation, mood }) => {
     const ash = ashes.find((a) => a.id === ashId);
     setHeals((h) => [{ id: uid(), date: nowMs(), ashId, category: ash?.category || 'Free Write', prompt, reflection, affirmation, mood }, ...h]);
+    setPending(NO_PENDING);
   };
 
   const restart = () => {
+    setPending(NO_PENDING);
     setPhase('write');
     setSnap(null);
     setPieces(null);
@@ -184,7 +194,7 @@ export default function App() {
             />
           )}
           {phase === 'burn' && snap && pieces && <Burn snap={snap} pieces={pieces} onIgnite={onIgnite} onDone={onBurnDone} />}
-          {phase === 'heal' && <Heal key="h" catId={healCat} nowMs={nowMs} onSave={saveHeal} onArchive={() => { setTab('heal'); setView('archive'); }} onRestart={restart} />}
+          {phase === 'heal' && <Heal key="h" catId={healCat} nowMs={nowMs} pending={pending} setPending={setPending} onSave={saveHeal} onArchive={() => { setTab('heal'); setView('archive'); }} onRestart={restart} />}
         </>
       )}
 

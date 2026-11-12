@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Shuffle, Sprout, Check, BookHeart, RotateCcw } from 'lucide-react';
 import { AFFIRMATIONS, HEAL_PROMPTS, MOODS } from '../data/content';
 import { fmtLong } from '../lib/util';
@@ -12,13 +12,18 @@ const pickAff = (avoid) => {
   return pool[Math.floor(Math.random() * pool.length)];
 };
 
-export default function Heal({ catId, nowMs, onSave, onArchive, onRestart }) {
-  const [hp, setHp] = useState(() => pickPrompt(catId));
-  const [aff, setAff] = useState(() => pickAff());
-  const [own, setOwn] = useState('');
-  const [text, setText] = useState('');
-  const [mood, setMood] = useState(null);
+export default function Heal({ catId, nowMs, pending, setPending, onSave, onArchive, onRestart }) {
+  const [hp, setHp] = useState(() => HEAL_PROMPTS.find((h) => h.id === pending.hpId) || pickPrompt(catId));
+  const [aff, setAff] = useState(() => pending.aff || pickAff());
+  const [own, setOwn] = useState(pending.own || '');
+  const [text, setText] = useState(pending.text || '');
+  const [mood, setMood] = useState(pending.mood || null);
   const [saved, setSaved] = useState(false);
+
+  // Cache the in-progress reflection so leaving mid-heal loses nothing.
+  useEffect(() => {
+    if (!saved) setPending((p) => ({ ...p, hpId: hp.id, aff, own, text, mood }));
+  }, [hp, aff, own, text, mood, saved, setPending]);
   const affirmation = own.trim() || aff;
   const date = useMemo(() => fmtLong(nowMs()), [nowMs]);
 

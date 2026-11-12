@@ -21,6 +21,7 @@ export const K = {
   heals: 'tav.heals.v1',
   settings: 'tav.settings.v1',
   draft: 'tav.draft.v1',
+  pending: 'tav.pending.v1',
 };
 
 export function usePersisted(key, init) {
