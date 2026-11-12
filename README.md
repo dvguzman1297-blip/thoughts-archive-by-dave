@@ -12,7 +12,7 @@ npm run dev
 Without setup, everything stays in this browser. To sync between phone and laptop:
 
 1. Create a free project at https://supabase.com.
-2. In the SQL editor, run [`supabase/schema.sql`](supabase/schema.sql).
+2. In the SQL editor, run [`supabase/schema.sql`](supabase/schema.sql) (creates the `thoughts-by-dave` schema). Then go to **Project Settings -> API -> Exposed schemas** and add `thoughts-by-dave`.
 3. **Authentication -> URL Configuration**: set *Site URL* to your deployed address (and add `http://localhost:5173` under *Redirect URLs* for local testing).
 4. Copy `.env.example` to `.env.local` and fill in the project URL and anon key (**Project Settings -> API**).
 5. Deploy (Vercel / Netlify / Cloudflare Pages) and add the same two variables in the host's environment settings. Build command `npm run build`, output `dist`.

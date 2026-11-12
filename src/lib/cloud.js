@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 
 const URL_ = import.meta.env.VITE_SUPABASE_URL;
 const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
-export const supabase = URL_ && ANON ? createClient(URL_, ANON) : null;
+export const supabase = URL_ && ANON ? createClient(URL_, ANON, { db: { schema: 'thoughts-by-dave' } }) : null;
 export const cloudEnabled = !!supabase;
 
 /* ---------- client-side encryption (the server only ever sees ciphertext) ---------- */
