@@ -160,6 +160,41 @@ export default function App() {
     toast('Everything has been cleared.');
   };
 
+  // Login comes first: until signed in and unlocked, show only the sign-in page.
+  const [skipLogin, setSkipLogin] = useState(() => {
+    try {
+      return localStorage.getItem('tav.skipLogin') === '1';
+    } catch {
+      return false;
+    }
+  });
+  // Once signed in, signing out later should bring the login page back.
+  useEffect(() => {
+    if (!cloud.user) return;
+    try {
+      localStorage.removeItem('tav.skipLogin');
+    } catch {
+      /* ignore */
+    }
+    setSkipLogin(false);
+  }, [cloud.user]);
+  if (cloud.enabled && !skipLogin && (!cloud.authReady || !cloud.user || !cloud.ready)) {
+    return (
+      <CloudPanel
+        page
+        cloud={cloud}
+        onSkip={() => {
+          try {
+            localStorage.setItem('tav.skipLogin', '1');
+          } catch {
+            /* ignore */
+          }
+          setSkipLogin(true);
+        }}
+      />
+    );
+  }
+
   const light = (view === 'ritual' && phase === 'heal') || (view === 'archive' && tab === 'heal');
   const inStage = view === 'ritual' && (phase === 'tear' || phase === 'burn');
   const stepIndex = STEPS.findIndex((s) => s.id === phase);

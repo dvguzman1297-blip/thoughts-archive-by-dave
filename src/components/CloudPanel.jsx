@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { X, Mail, KeyRound, Cloud, LogOut, RefreshCw, ShieldCheck, Loader2, AlertTriangle } from 'lucide-react';
 
-export default function CloudPanel({ cloud, onClose }) {
+export default function CloudPanel({ cloud, onClose, page = false, onSkip }) {
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [sent, setSent] = useState(false);
@@ -11,10 +11,11 @@ export default function CloudPanel({ cloud, onClose }) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    if (page) return undefined;
     const h = (e) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [onClose]);
+  }, [onClose, page]);
 
   const run = async (fn) => {
     setErr('');
@@ -33,14 +34,24 @@ export default function CloudPanel({ cloud, onClose }) {
   const field = 'w-full rounded-xl border border-ink/15 bg-white px-4 py-3 text-base placeholder:text-ink/35 focus:border-terra';
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4" onClick={onClose}>
-      <div className="w-full sm:max-w-md max-h-[92dvh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-paper text-ink p-6 shadow-2xl animate-fadeUp" onClick={(e) => e.stopPropagation()}>
+    <div
+      className={page ? 'min-h-[100dvh] flex flex-col items-center justify-center px-4 py-10 bg-desk' : 'fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-0 sm:p-4'}
+      style={page ? { backgroundImage: 'radial-gradient(ellipse 70% 55% at 50% 0%, rgba(255,186,110,.16), transparent 70%)' } : undefined}
+      onClick={page ? undefined : onClose}
+    >
+      {page && (
+        <div className="mb-6 text-center text-paper animate-fadeUp">
+          <p className="font-serif text-3xl sm:text-4xl">Thoughts Archived</p>
+          <p className="font-serif italic text-paper/60 mt-1">by Dave</p>
+        </div>
+      )}
+      <div className={`w-full sm:max-w-md max-h-[92dvh] overflow-y-auto bg-paper text-ink p-6 shadow-2xl animate-fadeUp ${page ? 'rounded-3xl' : 'rounded-t-3xl sm:rounded-3xl'}`} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2">
             <Cloud size={20} className="text-terra" />
-            <h2 className="font-serif text-2xl">Sync across devices</h2>
+            <h2 className="font-serif text-2xl">{page ? 'Welcome back' : 'Sync across devices'}</h2>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-ink/10" aria-label="Close"><X size={18} /></button>
+          {!page && <button onClick={onClose} className="p-1.5 rounded-full hover:bg-ink/10" aria-label="Close"><X size={18} /></button>}
         </div>
 
         {!cloud.enabled && (
@@ -113,7 +124,13 @@ export default function CloudPanel({ cloud, onClose }) {
         )}
 
         {(err || cloud.error) && <p className="mt-4 text-sm text-red-700 bg-red-50 rounded-xl p-3 break-words">{err || cloud.error}</p>}
+        {page && cloud.user && !cloud.ready && <button className="mt-4 text-xs text-ink/50 underline" onClick={cloud.signOut}>Use a different email</button>}
       </div>
+      {page && onSkip && (
+        <button onClick={onSkip} className="mt-5 text-sm text-paper/50 hover:text-paper/80 underline underline-offset-4">
+          Continue on this device only
+        </button>
+      )}
     </div>
   );
 }
