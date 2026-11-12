@@ -254,6 +254,10 @@ export function useCloud({ snapshot, apply }) {
     if (e) throw e;
     try { localStorage.setItem('tav.lastEmail', email.trim().toLowerCase()); } catch { /* ignore */ }
   };
+  const oauth = async (provider) => {
+    const { error: e } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: window.location.origin + window.location.pathname } });
+    if (e) throw e;
+  };
   const verifyCode = async (email, token) => {
     const { error: e } = await supabase.auth.verifyOtp({ email, token: token.trim(), type: 'email' });
     if (e) throw e;
@@ -333,5 +337,5 @@ export function useCloud({ snapshot, apply }) {
     await supabase.auth.signOut();
   };
 
-  return { enabled: cloudEnabled, authReady, user, ready, hasRemote, status, error, lastSynced, sendLink, verifyCode, unlock, login, register, forgetKey, signOut, syncNow };
+  return { enabled: cloudEnabled, authReady, user, ready, hasRemote, status, error, lastSynced, sendLink, verifyCode, oauth, unlock, login, register, forgetKey, signOut, syncNow };
 }
