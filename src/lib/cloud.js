@@ -23,6 +23,12 @@ async function deriveKey(pass, saltB64) {
   const base = await crypto.subtle.importKey('raw', enc.encode(pass.normalize('NFKC')), 'PBKDF2', false, ['deriveKey']);
   return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: fromB64(saltB64), iterations: 310000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
 }
+async function authPassword(email, pass) {
+  if (!globalThis.crypto?.subtle) throw new Error('Encryption needs a secure (https) connection.');
+  const base = await crypto.subtle.importKey('raw', enc.encode(pass.normalize('NFKC')), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: enc.encode('thoughts-archived-auth:' + email), iterations: 310000, hash: 'SHA-256' }, base, 256);
+  return toB64(bits);
+}
 async function encryptDoc(key, obj) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(JSON.stringify(obj)));
@@ -126,6 +132,8 @@ export function useCloud({ snapshot, apply }) {
   const busy = useRef(false);
   const again = useRef(false);
   const syncRef = useRef(() => {});
+  const keyUid = useRef(null);
+  const uid = user?.id || null;
 
   // auth session
   useEffect(() => {
@@ -140,22 +148,33 @@ export function useCloud({ snapshot, apply }) {
 
   // when the user changes: restore cached key or find out whether cloud data exists
   useEffect(() => {
+    if (!uid) {
+      keyRef.current = null;
+      keyUid.current = null;
+      setReady(false);
+      setHasRemote(null);
+      return undefined;
+    }
+    if (keyUid.current === uid && keyRef.current) {
+      setReady(true); // already unlocked in this session (e.g. just signed in with passphrase)
+      return undefined;
+    }
     keyRef.current = null;
     setReady(false);
     setHasRemote(null);
-    if (!user) return;
     let dead = false;
     (async () => {
-      const k = await loadKey(user.id);
+      const k = await loadKey(uid);
       if (dead) return;
       if (k) {
         keyRef.current = k.key;
+        keyUid.current = uid;
         saltRef.current = k.salt;
         setReady(true);
         return;
       }
       try {
-        const row = await fetchRow(user.id);
+        const row = await fetchRow(uid);
         if (!dead) setHasRemote(!!row);
       } catch (e) {
         if (!dead) setError(e.message);
@@ -164,7 +183,7 @@ export function useCloud({ snapshot, apply }) {
     return () => {
       dead = true;
     };
-  }, [user]);
+  }, [uid]);
 
   const syncNow = useCallback(async () => {
     if (!supabase || !keyRef.current || !user) return;
@@ -233,20 +252,21 @@ export function useCloud({ snapshot, apply }) {
   const sendLink = async (email) => {
     const { error: e } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin + window.location.pathname } });
     if (e) throw e;
+    try { localStorage.setItem('tav.lastEmail', email.trim().toLowerCase()); } catch { /* ignore */ }
   };
   const verifyCode = async (email, token) => {
     const { error: e } = await supabase.auth.verifyOtp({ email, token: token.trim(), type: 'email' });
     if (e) throw e;
   };
-  const unlock = async (pass, create) => {
+  // Derives the journal key. Creates it on first use, otherwise verifies it against the cloud copy.
+  const unlockFor = async (userId, pass) => {
+    const row = await fetchRow(userId);
     let salt;
     let key;
-    if (create) {
+    if (!row) {
       salt = toB64(crypto.getRandomValues(new Uint8Array(16)));
       key = await deriveKey(pass, salt);
     } else {
-      const row = await fetchRow(user.id);
-      if (!row) throw new Error('No cloud data found for this account.');
       salt = row.salt;
       key = await deriveKey(pass, salt);
       try {
@@ -256,12 +276,49 @@ export function useCloud({ snapshot, apply }) {
       }
     }
     keyRef.current = key;
+    keyUid.current = userId;
     saltRef.current = salt;
-    await saveKey(user.id, key, salt);
+    await saveKey(userId, key, salt);
     setReady(true);
+  };
+  const unlock = (pass) => unlockFor(user.id, pass);
+
+  // Passphrase accounts: the one passphrase gives a derived account password (what the server sees)
+  // and, separately, the journal encryption key (which never leaves this device).
+  const rememberEmail = (email) => {
+    try {
+      localStorage.setItem('tav.lastEmail', email);
+    } catch {
+      /* ignore */
+    }
+  };
+  const login = async (email, pass) => {
+    const e = email.trim().toLowerCase();
+    const { data, error: err } = await supabase.auth.signInWithPassword({ email: e, password: await authPassword(e, pass) });
+    if (err) {
+      throw new Error(/invalid login/i.test(err.message) ? 'Email or passphrase not recognised. If you registered with an email link, use the "Email link" tab.' : err.message);
+    }
+    await unlockFor(data.user.id, pass);
+    rememberEmail(e);
+  };
+  const register = async (email, pass) => {
+    const e = email.trim().toLowerCase();
+    const { data, error: err } = await supabase.auth.signUp({
+      email: e,
+      password: await authPassword(e, pass),
+      options: { emailRedirectTo: window.location.origin + window.location.pathname },
+    });
+    if (err) throw err;
+    rememberEmail(e);
+    if (data.session && data.user) {
+      await unlockFor(data.user.id, pass);
+      return 'done';
+    }
+    return 'confirm'; // email confirmation is switched on in Supabase
   };
   const forgetKey = () => {
     clearKey();
+    keyUid.current = null;
     keyRef.current = null;
     setReady(false);
     setStatus('idle');
@@ -269,11 +326,12 @@ export function useCloud({ snapshot, apply }) {
   };
   const signOut = async () => {
     clearKey();
+    keyUid.current = null;
     keyRef.current = null;
     setReady(false);
     setStatus('idle');
     await supabase.auth.signOut();
   };
 
-  return { enabled: cloudEnabled, authReady, user, ready, hasRemote, status, error, lastSynced, sendLink, verifyCode, unlock, forgetKey, signOut, syncNow };
+  return { enabled: cloudEnabled, authReady, user, ready, hasRemote, status, error, lastSynced, sendLink, verifyCode, unlock, login, register, forgetKey, signOut, syncNow };
 }

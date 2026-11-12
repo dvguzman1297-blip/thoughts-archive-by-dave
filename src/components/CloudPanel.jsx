@@ -2,13 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { X, Mail, KeyRound, Cloud, LogOut, RefreshCw, ShieldCheck, Loader2, AlertTriangle } from 'lucide-react';
 
 export default function CloudPanel({ cloud, onClose, page = false, onSkip }) {
-  const [email, setEmail] = useState('');
+  const remembered = (() => { try { return localStorage.getItem('tav.lastEmail') || ''; } catch { return ''; } })();
+  const [email, setEmail] = useState(remembered);
   const [code, setCode] = useState('');
   const [sent, setSent] = useState(false);
   const [pass, setPass] = useState('');
   const [pass2, setPass2] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState('login');
+  const [note, setNote] = useState('');
 
   useEffect(() => {
     if (page) return undefined;
@@ -64,19 +67,66 @@ export default function CloudPanel({ cloud, onClose, page = false, onSkip }) {
         {cloud.enabled && !cloud.authReady && <p className="mt-6 text-sm flex items-center gap-2"><Loader2 className="animate-spin" size={16} /> Loading…</p>}
 
         {cloud.enabled && cloud.authReady && !cloud.user && (
-          <div className="mt-4 space-y-3">
-            <p className="text-sm text-ink/70">Sign in with your email. No password needed: we send you a one-time link (or code).</p>
-            <input type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className={field} />
-            <button className="btn btn-ember w-full" disabled={busy || !email.includes('@')} onClick={() => run(async () => { await cloud.sendLink(email.trim()); setSent(true); })}>
-              <Mail size={16} /> {sent ? 'Send again' : 'Email me a sign-in link'}
-            </button>
-            {sent && (
-              <div className="space-y-2 pt-1">
-                <p className="text-sm text-ink/70">Check your inbox and open the link on this device. Or type the 6-digit code from the email if there is one:</p>
-                <input inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" className={field} />
-                <button className="btn btn-ghost-light w-full" disabled={busy || code.trim().length < 6} onClick={() => run(() => cloud.verifyCode(email.trim(), code))}>Verify code</button>
-              </div>
-            )}
+          <div className="mt-4">
+            <div className="grid grid-cols-3 gap-1 rounded-full bg-ink/5 p-1 text-sm" role="tablist">
+              {[['login', 'Sign in'], ['register', 'Register'], ['link', 'Email link']].map(([id, label]) => (
+                <button key={id} role="tab" aria-selected={mode === id} onClick={() => { setMode(id); setErr(''); setNote(''); }} className={`rounded-full py-2 font-medium transition ${mode === id ? 'bg-terra text-paper shadow' : 'text-ink/60 hover:text-ink'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {remembered && mode === 'login' && <p className="mt-3 text-xs text-botanical">Remembered on this device: {remembered}</p>}
+
+            <div className="mt-4 space-y-3">
+              <input type="email" inputMode="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className={field} />
+
+              {mode !== 'link' && (
+                <>
+                  <input type="password" autoComplete={mode === 'register' ? 'new-password' : 'current-password'} value={pass} onChange={(e) => setPass(e.target.value)} placeholder="Passphrase (8+ characters)" className={field} />
+                  {mode === 'register' && <input type="password" autoComplete="new-password" value={pass2} onChange={(e) => setPass2(e.target.value)} placeholder="Repeat passphrase" className={field} />}
+                  {mode === 'register' && (
+                    <div className="space-y-2">
+                      <div className="flex items-start gap-2 rounded-xl bg-botanical/10 p-3 text-xs text-ink/75">
+                        <ShieldCheck size={16} className="shrink-0 text-botanical mt-0.5" />
+                        <p>This one passphrase signs you in and encrypts your journal on your device. The server never sees it or your writing.</p>
+                      </div>
+                      <p className="text-xs text-terra flex items-start gap-1.5"><AlertTriangle size={14} className="shrink-0 mt-0.5" /> If you forget it, it cannot be reset and your cloud journal cannot be recovered.</p>
+                    </div>
+                  )}
+                  {mode === 'register' && pass2 && pass !== pass2 && <p className="text-xs text-red-700">Passphrases do not match.</p>}
+                  <button
+                    className="btn btn-ember w-full"
+                    disabled={busy || !email.includes('@') || pass.length < 8 || (mode === 'register' && pass !== pass2)}
+                    onClick={() => run(async () => {
+                      if (mode === 'login') await cloud.login(email, pass);
+                      else if ((await cloud.register(email, pass)) === 'confirm') { setNote('Almost there. Open the confirmation link we emailed you, then come back and sign in.'); setMode('login'); }
+                      setPass('');
+                      setPass2('');
+                    })}
+                  >
+                    <KeyRound size={16} /> {busy ? 'Working…' : mode === 'login' ? 'Sign in' : 'Create my account'}
+                  </button>
+                </>
+              )}
+
+              {mode === 'link' && (
+                <>
+                  <p className="text-sm text-ink/70">No passphrase needed to sign in. We email you a one-time link (or code). You will still enter your journal passphrase afterwards.</p>
+                  <button className="btn btn-ember w-full" disabled={busy || !email.includes('@')} onClick={() => run(async () => { await cloud.sendLink(email.trim()); setSent(true); })}>
+                    <Mail size={16} /> {sent ? 'Send again' : 'Email me a sign-in link'}
+                  </button>
+                  {sent && (
+                    <div className="space-y-2 pt-1">
+                      <p className="text-sm text-ink/70">Open the link on this device, or type the 6-digit code from the email if there is one:</p>
+                      <input inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" className={field} />
+                      <button className="btn btn-ghost-light w-full" disabled={busy || code.trim().length < 6} onClick={() => run(() => cloud.verifyCode(email.trim(), code))}>Verify code</button>
+                    </div>
+                  )}
+                </>
+              )}
+              {note && <p className="text-sm text-botanical bg-botanical/10 rounded-xl p-3">{note}</p>}
+            </div>
           </div>
         )}
 
