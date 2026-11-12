@@ -22,6 +22,7 @@ export const K = {
   settings: 'tav.settings.v1',
   draft: 'tav.draft.v1',
   pending: 'tav.pending.v1',
+  meta: 'tav.meta.v1',
 };
 
 export function usePersisted(key, init) {

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { BookOpen, Volume2, VolumeX, Archive as ArchiveIcon, Pencil, Scissors, Flame, Sprout } from 'lucide-react';
+import { Cloud, CloudOff, BookOpen, Volume2, VolumeX, Archive as ArchiveIcon, Pencil, Scissors, Flame, Sprout } from 'lucide-react';
 import { CATEGORIES, PROMPTS, catById, computeUnlock, promptById } from './data/content';
 import { K, fmtLong, seal, uid, usePersisted, wordCount, dailyIndex } from './lib/util';
 import { chime, setMuted } from './lib/audio';
@@ -10,6 +10,8 @@ import Burn from './components/Burn';
 import Heal from './components/Heal';
 import Archive from './components/Archive';
 import Settings from './components/Settings';
+import CloudPanel from './components/CloudPanel';
+import { useCloud } from './lib/cloud';
 
 const STEPS = [
   { id: 'write', label: 'Write', icon: Pencil },
@@ -37,6 +39,41 @@ export default function App() {
   const [healCat, setHealCat] = useState(pending.cat || 'any');
   const [toastMsg, setToastMsg] = useState(null);
   const toastTimer = useRef(null);
+
+  /* ---- cross-device sync (optional; local-only until Supabase is configured) ---- */
+  const [meta, setMeta] = usePersisted(K.meta, { draftAt: 0, pendingAt: 0, deleted: [] });
+  const [cloudOpen, setCloudOpen] = useState(false);
+  const lastDraft = useRef(JSON.stringify(draft));
+  const lastPending = useRef(JSON.stringify(pending));
+  // Stamp edit times so the newest draft wins between devices.
+  useEffect(() => {
+    const j = JSON.stringify(draft);
+    if (j === lastDraft.current) return;
+    lastDraft.current = j;
+    setMeta((m) => ({ ...m, draftAt: Date.now() }));
+  }, [draft, setMeta]);
+  useEffect(() => {
+    const j = JSON.stringify(pending);
+    if (j === lastPending.current) return;
+    lastPending.current = j;
+    setMeta((m) => ({ ...m, pendingAt: Date.now() }));
+  }, [pending, setMeta]);
+  const applyRemote = useCallback(
+    (m) => {
+      lastDraft.current = JSON.stringify(m.draft);
+      lastPending.current = JSON.stringify(m.pending);
+      setAshes(m.ashes);
+      setHeals(m.heals);
+      setDraft(m.draft);
+      setPending(m.pending);
+      setMeta({ draftAt: m.draftAt, pendingAt: m.pendingAt, deleted: m.deleted });
+    },
+    [setAshes, setHeals, setDraft, setPending, setMeta],
+  );
+  const cloud = useCloud({
+    snapshot: { ashes, heals, deleted: meta.deleted || [], draft, draftAt: meta.draftAt || 0, pending, pendingAt: meta.pendingAt || 0 },
+    apply: applyRemote,
+  });
 
   const nowMs = useCallback(() => Date.now() + (settings.offsetMs || 0), [settings.offsetMs]);
   useEffect(() => setMuted(settings.muted), [settings.muted]);
@@ -113,6 +150,8 @@ export default function App() {
   };
 
   const wipe = () => {
+    // Remember what was erased so other devices drop it too instead of re-syncing it back.
+    setMeta((m) => ({ ...m, deleted: [...(m.deleted || []), ...ashes.map((a) => a.id), ...heals.map((h) => h.id)] }));
     setAshes([]);
     setHeals([]);
     setDraft({ text: '', promptId: null, free: false, lock: '90d', cat: 'all' });
@@ -167,6 +206,10 @@ export default function App() {
               <span className="hidden sm:inline">{view === 'archive' ? 'Back to journal' : 'Sanctuary Archive'}</span>
               <span className="sm:hidden">{view === 'archive' ? 'Journal' : 'Archive'}</span>
             </button>
+            <button onClick={() => setCloudOpen(true)} className={`relative p-2 rounded-full transition ${light ? 'hover:bg-black/5 text-ink/70' : 'hover:bg-white/10 text-paper/70'}`} aria-label="Sync across devices" title={cloud.ready ? 'Synced across devices' : 'Sync across devices'}>
+              {cloud.enabled ? <Cloud size={18} /> : <CloudOff size={18} />}
+              {cloud.ready && <span className={`absolute top-1.5 right-1.5 h-2 w-2 rounded-full ${cloud.status === 'error' ? 'bg-red-500' : cloud.status === 'syncing' ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />}
+            </button>
             <button onClick={() => setSettings({ ...settings, muted: !settings.muted })} className={`p-2 rounded-full transition ${light ? 'hover:bg-black/5 text-ink/70' : 'hover:bg-white/10 text-paper/70'}`} aria-label={settings.muted ? 'Unmute' : 'Mute'} title={settings.muted ? 'Unmute' : 'Mute'}>
               {settings.muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
             </button>
@@ -176,7 +219,10 @@ export default function App() {
       </header>
 
       {view === 'archive' ? (
-        <Archive tab={tab} setTab={setTab} heals={heals} ashes={ashes} settings={settings} setSettings={setSettings} nowMs={nowMs} toast={toast} onDeleteAsh={(id) => setAshes((a) => a.filter((x) => x.id !== id))} />
+        <Archive tab={tab} setTab={setTab} heals={heals} ashes={ashes} settings={settings} setSettings={setSettings} nowMs={nowMs} toast={toast} onDeleteAsh={(id) => {
+          setAshes((a) => a.filter((x) => x.id !== id));
+          setMeta((m) => ({ ...m, deleted: [...(m.deleted || []), id] }));
+        }} />
       ) : (
         <>
           {phase === 'write' && <Write key="w" draft={draft} setDraft={setDraft} settings={settings} setSettings={setSettings} nowMs={nowMs} onContinue={beginTear} />}
@@ -197,6 +243,8 @@ export default function App() {
           {phase === 'heal' && <Heal key="h" catId={healCat} nowMs={nowMs} pending={pending} setPending={setPending} onSave={saveHeal} onArchive={() => { setTab('heal'); setView('archive'); }} onRestart={restart} />}
         </>
       )}
+
+      {cloudOpen && <CloudPanel cloud={cloud} onClose={() => setCloudOpen(false)} />}
 
       {toastMsg && (
         <div className="fixed bottom-6 inset-x-0 z-[60] flex justify-center px-4 pointer-events-none">
